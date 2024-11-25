@@ -5,6 +5,7 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import asdict, replace
 from enum import Enum
+from functools import partial, reduce
 from typing import Optional
 
 import torch
@@ -27,7 +28,6 @@ from peft.utils import (
 
 from .layer import SMTLayer, SparseLinear
 import bitsandbytes as bnb
-from bitsandbytes.functional import dequantize_4bit, quantize_4bit
 
 def _adapter_names_pre_forward_hook(target, args, kwargs, adapter_names):
     # pre-forward hook to inject the adapter_names argument when using mixed adapter batches inference

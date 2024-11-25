@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Optional
+from typing import Any, Optional, List
 
 import torch
 import torch.nn as nn
@@ -25,6 +25,7 @@ from peft.tuners.tuners_utils import BaseTunerLayer, check_adapters_to_merge
 from peft.utils.integrations import dequantize_bnb_weight
 
 from .layer import SMTLayer, linearZExMod
+import bitsandbytes as bnb
 
 if is_bnb_available():
     class SparseLinear8bitLt(nn.Module, SMTLayer):

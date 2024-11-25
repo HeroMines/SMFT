@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Union, List, Any
+from typing import Optional, Union, List, Any, Dict
 
 from peft.config import PeftConfig
 from peft.utils import PeftType
