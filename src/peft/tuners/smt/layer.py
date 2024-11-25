@@ -256,16 +256,23 @@ class linearZExMod(torch.autograd.Function):
         # Maintain partial input in `input_list`
         input_list = []
         for index in matrix_index_list:
-            input_list.append(input[:, :, index[1]*block_size: (index[1] + 1) * block_size])
+            input_list.append(input[:, :, index[1] * block_size: (index[1] + 1) * block_size])
 
         # Create a copy of the weight tensor
         updated_weight = weight.clone()
+
+        requires_conversion = not torch.is_autocast_enabled()
+        if requires_conversion:
+            expected_dtype = input.dtype
+            compute_dtype = updated_weight.dtype
+            if input.dtype != compute_dtype:
+                input = input.to(compute_dtype)
 
         # Update the selected blocks in the weight copy
         for i, index in enumerate(matrix_index_list):
             updated_weight[index[0] * block_size:(index[0] + 1) * block_size,
                            index[1] * block_size:(index[1] + 1) * block_size] = \
-                selected_weight[i * block_size:(i + 1)* block_size, :].view(block_size, block_size)
+                selected_weight[i * block_size:(i + 1) * block_size, :].view(block_size, block_size)
 
         # Save for backward
         ctx.save_for_backward(input, selected_weight, weight)
@@ -275,7 +282,7 @@ class linearZExMod(torch.autograd.Function):
         # Compute output using the updated weight
         output = torch.matmul(input, updated_weight.t())
 
-        return output
+        return output.to(compute_dtype)
 
     @staticmethod
     def backward(ctx, grad_output):
