@@ -108,3 +108,4 @@ from .utils import (
     cast_mixed_precision_params,
 )
 from .config import PeftConfig, PromptLearningConfig
+from .smt import SMT
