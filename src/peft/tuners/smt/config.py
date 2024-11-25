@@ -21,7 +21,7 @@ class SMTConfig(PeftConfig):
         block_size (`int`):
             The l x l dimensions of the submatrix blocks.
         selection_method (`str`):
-            Which selection method to use. Available options: GW, AWQ, MW.
+            Which selection method to use. Available options: GW, AW, MW.
         target_modules (`Optional[Union[List[str], str]]`):
             The names of the modules to apply SMT to. This is an alias for `sparse_modules` and will be used if
             `sparse_modules` is not specified.

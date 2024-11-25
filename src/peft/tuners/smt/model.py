@@ -27,7 +27,14 @@ from peft.utils import (
 )
 
 from .layer import SMTLayer, SparseLinear
-import bitsandbytes as bnb
+# avoid eager bnb import
+if is_bnb_available():
+    import bitsandbytes as bnb
+    
+    from .bnb import SparseLinear8bitLt
+
+if is_bnb_4bit_available():
+    from .bnb import SparseLinear4bit
 
 def _adapter_names_pre_forward_hook(target, args, kwargs, adapter_names):
     # pre-forward hook to inject the adapter_names argument when using mixed adapter batches inference
@@ -122,15 +129,7 @@ class SMTModel(BaseTuner):
 
     @staticmethod
     def _create_new_module(smt_config, adapter_name, target, **kwargs):
-        # avoid eager bnb import
-        if is_bnb_available():
-            import bitsandbytes as bnb
-            
-            from .bnb import SparseLinear8bitLt
-
-        if is_bnb_4bit_available():
-            from .bnb import SparseLinear4bit
-
+        print("These are the kwargs", kwargs)
         loaded_in_8bit = kwargs.pop("loaded_in_8bit", False)
         loaded_in_4bit = kwargs.pop("loaded_in_4bit", False)
 
