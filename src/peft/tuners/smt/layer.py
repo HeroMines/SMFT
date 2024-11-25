@@ -226,7 +226,8 @@ class SparseLinear(nn.Module, SMTLayer):
     def forward(self, input: torch.Tensor, *args: Any, **kwargs: Any) -> torch.Tensor:
         self._check_forward_args(input, *args, **kwargs)
         adapter_names = kwargs.pop("adapter_names", None)
-
+        device_dtype = input.dtype
+        
         if self.disable_adapters:
             if self.merged:
                 self.unmerge()
@@ -239,11 +240,12 @@ class SparseLinear(nn.Module, SMTLayer):
             for active_adapter in self.active_adapters:
                 if active_adapter in self.smt_weight.keys():
                     smt_weight = self.smt_weight[active_adapter]
+                    base_weight = self.base_layer.weight.to(device_dtype)
                     # for i, index in enumerate(self.index_list):
                     #     self.base_layer.weight.data[index[0] * self.block_size: index[0] * self.block_size + self.block_size,
                     #                     index[1] * self.block_size: index[1] * self.block_size + self.block_size] = \
                     #         smt_weight.data[i * self.block_size: i * self.block_size + self.block_size, :]
-                    result = self.fn(input, smt_weight, self.index_list, self.base_layer.weight, self.block_size)
+                    result = self.fn(input, smt_weight, self.index_list, base_weight, self.block_size)
         return result
 
     def __repr__(self) -> str:
@@ -253,6 +255,10 @@ class SparseLinear(nn.Module, SMTLayer):
 class linearZExMod(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, selected_weight, matrix_index_list, weight, block_size):
+        device_dtype = input.dtype
+        weight = weight.to(device_dtype)
+        selected_weight = selected_weight.to(device_dtype)
+
         # Maintain partial input in `input_list`
         input_list = []
         for index in matrix_index_list:
@@ -260,13 +266,6 @@ class linearZExMod(torch.autograd.Function):
 
         # Create a copy of the weight tensor
         updated_weight = weight.clone()
-
-        requires_conversion = not torch.is_autocast_enabled()
-        if requires_conversion:
-            expected_dtype = input.dtype
-            compute_dtype = updated_weight.dtype
-            if input.dtype != compute_dtype:
-                input = input.to(compute_dtype)
 
         # Update the selected blocks in the weight copy
         for i, index in enumerate(matrix_index_list):
@@ -286,7 +285,8 @@ class linearZExMod(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        input, selected_weight, weight = ctx.saved_tensors
+        device_dtype = grad_output.dtype
+        input, selected_weight, weight = (t.to(device_dtype) for t in ctx.saved_tensors)
         matrix_index_list = ctx.matrix_index_list
         block_size = ctx.block_size
 
