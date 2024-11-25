@@ -239,7 +239,7 @@ class SparseLinear(nn.Module, SMTLayer):
         else:
             for active_adapter in self.active_adapters:
                 if active_adapter in self.smt_weight.keys():
-                    smt_weight = self.smt_weight[active_adapter]
+                    smt_weight = self.smt_weight[active_adapter].to(device_dtype)
                     base_weight = self.base_layer.weight.to(device_dtype)
                     # for i, index in enumerate(self.index_list):
                     #     self.base_layer.weight.data[index[0] * self.block_size: index[0] * self.block_size + self.block_size,
@@ -281,7 +281,7 @@ class linearZExMod(torch.autograd.Function):
         # Compute output using the updated weight
         output = torch.matmul(input, updated_weight.t())
 
-        return output.to(compute_dtype)
+        return output
 
     @staticmethod
     def backward(ctx, grad_output):
