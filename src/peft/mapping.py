@@ -65,6 +65,8 @@ from .tuners import (
     VeraConfig,
     VeraModel,
     XLoraConfig,
+    SMTConfig,
+    SMTModel
 )
 from .tuners.tuners_utils import BaseTuner
 from .utils import _prepare_prompt_learning_config
@@ -104,6 +106,7 @@ PEFT_TYPE_TO_CONFIG_MAPPING: dict[str, type[PeftConfig]] = {
     "XLORA": XLoraConfig,
     "HRA": HRAConfig,
     "VBLORA": VBLoRAConfig,
+    "SMT": SMTConfig
 }
 
 PEFT_TYPE_TO_TUNER_MAPPING: dict[str, type[BaseTuner]] = {
@@ -121,6 +124,7 @@ PEFT_TYPE_TO_TUNER_MAPPING: dict[str, type[BaseTuner]] = {
     "XLORA": XLoraModel,
     "HRA": HRAModel,
     "VBLORA": VBLoRAModel,
+    "SMT": SMTModel
 }
 
 

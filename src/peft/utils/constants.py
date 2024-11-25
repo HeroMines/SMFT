@@ -300,6 +300,7 @@ PEFT_TYPE_TO_PREFIX_MAPPING = {
     PeftType.FOURIERFT: "fourierft_",
     PeftType.HRA: "hra_",
     PeftType.VBLORA: "vblora_",
+    PeftType.SMT: "smt_"
 }
 
 WEIGHTS_NAME = "adapter_model.bin"
