@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from collections import defaultdict
+from functools import partial
 
 class LinearLayer_MatrixSparsity(torch.nn.Module):
     def __init__(self, weight, bias=None, index_list=[], block_size=256):
@@ -210,31 +212,42 @@ class SMT():
 
     def compute_activation_magnitudes(self, dataloader):
         self.model.eval()
-        for step, batch in enumerate(dataloader):
-            if step >= self.warmup_steps:
-                break
-            with torch.no_grad():
+        activation_magnitudes = defaultdict(list)
+
+        def L2_norm(activation_tensor):
+            return torch.sqrt(torch.sum(activation_tensor.abs() ** 2, dim=(1, 2)))
+            
+        def cache_input_hook(module, input, output, name):
+            activation_magnitudes[name].append(input[0].detach())
+
+        hooks = []
+        for name, module in self.model.named_modules():
+            if isinstance(module, nn.Linear) and any(proj in name for proj in self.sparse_modules):
+                hooks.append(module.register_forward_hook(
+                    partial(cache_input_hook, name=name)
+                ))
+
+        with torch.no_grad():
+            for step, batch in enumerate(dataloader):
+                if step >= self.warmup_steps:
+                    break
                 # Move batch to the same device as the model
                 batch = {k: v.to(self.model.device) for k, v in batch.items() if isinstance(v, torch.Tensor)}
-
-                # Only pass input_ids, attention_mask
                 inputs = {
                     'input_ids': batch['input_ids'],
                     'attention_mask': batch['attention_mask']
                 }
+                self.model(**inputs)
 
-                # Forward pass
-                outputs = self.model(**inputs)
+        for h in hooks:
+            h.remove()
 
-                for name, module in self.model.named_modules():
-                    if isinstance(module, nn.Linear) and any(proj in name for proj in self.sparse_modules):
-                        if name not in self.activation_magnitudes:
-                            self.activation_magnitudes[name] = []
-                        self.activation_magnitudes[name].append(module.weight.abs().mean(dim=1))
+        # Compute L2 norms
+        for name in activation_magnitudes:
+            activations = torch.stack(activation_magnitudes[name])
+            self.activation_magnitudes[name] = L2_norm(activations).mean(dim=0)
 
-        for name in self.activation_magnitudes:
-            self.activation_magnitudes[name] = torch.stack(self.activation_magnitudes[name]).mean(dim=0)
-        
+        del activation_magnitudes
         self.aw_select_submatrices()
 
     def aw_select_submatrices(self):
@@ -243,18 +256,18 @@ class SMT():
 
         for name, magnitudes in self.activation_magnitudes.items():
             # Calculate the number of blocks in output and input dimensions
-            out_blocks, in_blocks = (magnitudes.shape[0] // self.block_size, self.model.get_submodule(name).weight.shape[1] // self.block_size)
+            out_blocks, in_blocks = (self.model.get_submodule(name).weight.shape[0] // self.block_size, magnitudes.shape[0] // self.block_size)
 
-            # Average the magnitudes for each output block
-            block_magnitudes = magnitudes.view(out_blocks, self.block_size).mean(dim=1)
+            # Average the magnitudes for each input block
+            block_magnitudes = magnitudes.view(in_blocks, self.block_size).mean(dim=1).abs()
             all_magnitudes.append(block_magnitudes)
 
             # Generate all possible (out_idx, in_idx) combinations for this layer
             all_indices.extend([(name, i, j) for i in range(out_blocks) for j in range(in_blocks)])
 
-        # Concatenate all magnitudes and repeat each in_blocks times
-        # This is because each output block magnitude applies to all its input blocks
-        all_magnitudes = torch.cat([m.repeat(in_blocks) for m in all_magnitudes])
+        # Concatenate all magnitudes and repeat each out_blocks times
+        # This is because each input block magnitude applies to all its output blocks
+        all_magnitudes = torch.cat([m.repeat(out_blocks) for m in all_magnitudes])
 
         # Select the top num_select blocks based on magnitudes
         num_select = int(self.sparsity_ratio * len(all_magnitudes))
