@@ -274,19 +274,27 @@ class linearZExMod(torch.autograd.Function):
                 selected_weight[i * block_size:(i + 1) * block_size, :].view(block_size, block_size)
 
         # Save for backward
-        ctx.save_for_backward(input, selected_weight, weight)
+        ctx.save_for_backward(selected_weight, weight)
+        ctx.input_list = input_list
         ctx.matrix_index_list = matrix_index_list
         ctx.block_size = block_size
 
         # Compute output using the updated weight
         output = torch.matmul(input, updated_weight.t())
 
+        # memory free
+        del weight
+        del input_list
+        del matrix_index_list
+        del block_size
+
         return output
 
     @staticmethod
     def backward(ctx, grad_output):
         device_dtype = grad_output.dtype
-        input, selected_weight, weight = (t.to(device_dtype) for t in ctx.saved_tensors)
+        selected_weight, weight = (t.to(device_dtype) for t in ctx.saved_tensors)
+        input_list = [t.to(device_dtype) for t in ctx.input_list]
         matrix_index_list = ctx.matrix_index_list
         block_size = ctx.block_size
 
@@ -296,12 +304,18 @@ class linearZExMod(torch.autograd.Function):
         # Calculate gradient for selected_weight
         grad_selected_weight = torch.zeros_like(selected_weight)
         for i, index in enumerate(matrix_index_list):
-            input_block = input[:, :, index[1] * block_size:(index[1] + 1) * block_size]
+            input_block = input_list[i]
             grad_output_block = grad_output[:, :, index[0] * block_size:(index[0] + 1) * block_size]
             grad_selected_weight[i * block_size: (i + 1) * block_size, :] = torch.sum(
                 torch.matmul(grad_output_block.permute(0, 2, 1), input_block),
                 dim=0
             ).view(-1, block_size)
+
+        # memory free
+        del weight
+        del input_list
+        del matrix_index_list
+        del block_size
 
         # We don't compute gradients for matrix_index_list, weight, or block_size
         return grad_input, grad_selected_weight, None, None, None
