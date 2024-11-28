@@ -31,6 +31,7 @@ class SMTLayer(BaseTunerLayer):
 
         self.in_features = in_features
         self.out_features = out_features
+        assert (in_features % block_size, out_features % block_size) == (0, 0)
 
     def update_layer(self, adapter_name, block_size, index_list):
         with gather_params_ctx(self.get_base_layer().weight):
@@ -255,9 +256,11 @@ class SparseLinear(nn.Module, SMTLayer):
 class linearZExMod(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, selected_weight, matrix_index_list, weight, block_size):
-        device_dtype = input.dtype
-        weight = weight.to(device_dtype)
-        selected_weight = selected_weight.to(device_dtype)
+        requires_conversion = not torch.is_autocast_enabled()
+        if requires_conversion:
+            device_dtype = input.dtype
+            weight = weight.to(device_dtype)
+            selected_weight = selected_weight.to(device_dtype)
 
         # Maintain partial input in `input_list`
         input_list = []
@@ -292,11 +295,16 @@ class linearZExMod(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        device_dtype = grad_output.dtype
-        selected_weight, weight = (t.to(device_dtype) for t in ctx.saved_tensors)
-        input_list = [t.to(device_dtype) for t in ctx.input_list]
+        selected_weight, weight = ctx.saved_tensors
+        input_list = ctx.input_list
         matrix_index_list = ctx.matrix_index_list
         block_size = ctx.block_size
+
+        requires_conversion = not torch.is_autocast_enabled()
+        if requires_conversion:
+            device_dtype = grad_output.dtype
+            selected_weight, weight = (t.to(device_dtype) for t in ctx.saved_tensors)
+            input_list = [t.to(device_dtype) for t in ctx.input_list]
 
         # Calculate gradient for input
         grad_input = torch.matmul(grad_output, weight)

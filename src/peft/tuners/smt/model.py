@@ -44,6 +44,7 @@ class SMTModel(BaseTuner):
     def _prepare_adapter_config(self, config, model_config):
         if config.target_modules is None:
             config.target_modules = config.sparse_modules
+            delattr(config, "sparse_modules")
         # TODO: Find a better place to put this
         # Putting it here is bad and I feel bad
         if not config.inference_mode:
@@ -59,28 +60,12 @@ class SMTModel(BaseTuner):
             self.select_submatrices(config)
             # Clear GPU memory
             torch.cuda.empty_cache()
-
-            # Do not override this please
-            # if hasattr(config, "exclude_modules") == False:
-            #     config.exclude_modules = []
-            # for name, module in self.model.named_modules():
-            #     if isinstance(module, nn.Linear) and name not in self.selected_indices:
-            #         config.exclude_modules.append(name)
-            # # print(config.exclude_modules)
-            # assert len(config.exclude_modules) > 0
             
             # remove dataloader after use
-            config.dataloader = None
+            delattr(config, "dataloader")
 
             # save the indices to config for later.
             config.selected_indices = self.selected_indices
-        if hasattr(config, "exclude_modules") == False:
-            config.exclude_modules = []
-        for name, module in self.model.named_modules():
-            if isinstance(module, nn.Linear) and name not in config.selected_indices:
-                config.exclude_modules.append(name)
-        # print(config.exclude_modules)
-        assert len(config.exclude_modules) > 0
         return config
 
     def _create_and_replace(
@@ -95,10 +80,12 @@ class SMTModel(BaseTuner):
         if current_key is None:
             raise ValueError("Current Key shouldn't be `None`")
         # print(adapter_name, target_name, current_key, self.selected_indices[current_key])
-        selected_weight_indices = config.selected_indices[current_key]
+        if current_key not in config.selected_indices:
+            return
+        selected_indices = config.selected_indices[current_key]
         
         kwargs = {
-            "index_list": selected_weight_indices,
+            "index_list": selected_indices,
             "block_size": config.block_size,
             "loaded_in_8bit": getattr(self.model, "is_loaded_in_8bit", False),
             "loaded_in_4bit": getattr(self.model, "is_loaded_in_4bit", False),
@@ -108,7 +95,7 @@ class SMTModel(BaseTuner):
             target.update_layer(
                 adapter_name,
                 config.block_size,
-                selected_weight_indices
+                selected_indices
             )
         else:
             new_module = self._create_new_module(config, adapter_name, target, **kwargs)
